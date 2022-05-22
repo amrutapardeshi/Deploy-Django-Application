@@ -1,0 +1,136 @@
+Installing python and nginx
+>>sudo apt update
+
+This will install python, pip and nginx server
+>>sudo apt install python3-pip python3-dev nginx
+
+Creating a python virtual environment
+>>sudo pip3 install virtualenv
+
+>>mkdir ~/projectdir
+>>cd ~/projectdir
+
+>>virtualenv env
+>>source env/bin/activate
+
+Installing Django and gunicorn
+>>pip install django gunicorn
+
+Install git
+>>pip install python-git
+
+clone repo
+git clone url
+Create Personal Access Token on GitHub
+From your GitHub account, go to Settings => Developer Settings => Personal Access Token => Generate New Token (Give your password) => Fillup the form => click Generate token => Copy the generated Token, it will be something like
+
+make sure manage.py should be in main folder projectdir
+cd in folder
+If you are inside the (directory) then run this command to take all content one level up
+>>mv * ../
+
+In settings.py paste your stack ip address in allowed hosts
+ALLOWED_HOSTS = ["Instance IP here"]      
+
+delete db.sqlite file and run these commands
+>>python3 manage.py makemigrations
+>>python3 manage.py migrate
+
+make sure this port should be open in networking
+>>sudo ufw allow 8000
+
+>>python3 manage.py runserver 0.0.0.0:8000
+run in browser
+>>publicip:8000
+see if this is running 
+
+check  if you can run this using gunicorn for scalability
+>>gunicorn --bind 0.0.0.0:8000 bot.wsgi
+
+Deactivate the virtualenvironment by executing the command below:
+>>deactivate
+
+Let's create a system socket file for gunicorn now:
+>>sudo vim /etc/systemd/system/gunicorn.socket
+
+**Paste the contents below and save the file**
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/run/gunicorn.sock
+
+[Install]
+WantedBy=sockets.target
+
+Next, we will create a service file for gunicorn
+>>sudo vim /etc/systemd/system/gunicorn.service
+
+**Paste this**
+[Unit]
+
+Description=gunicorn socket
+
+After=network.target
+
+
+
+[Service]
+
+User=ubuntu
+
+Group=www-data
+
+WorkingDirectory=/home/ubuntu/projectdir
+
+ExecStart=/home/ubuntu/projectdir/env/bin/gunicorn \
+
+          --access-logfile - \
+
+          --workers 3 \
+
+          --bind unix:/run/gunicorn.sock \
+
+          bot.wsgi:application
+
+
+
+[Install]
+
+WantedBy=multi-user.target
+
+
+
+**Lets now start and enable the gunicorn socket**
+>>sudo systemctl start gunicorn.socket
+>>sudo systemctl enable gunicorn.socket
+
+
+**Configuring Nginx as a reverse proxy**
+Create a configuration file for Nginx using the following command
+>>sudo vim /etc/nginx/sites-available/bot
+
+**paste this**
+server {
+    listen 80;
+    server_name "website-address-here";
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /home/ubuntu/projectdir;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+
+Activate
+>>sudo ln -s /etc/nginx/sites-available/bot /etc/nginx/sites-enabled/
+
+Restart
+>>sudo systemctl restart nginx
+
+>>cd /etc/nginx/sites-enabled/
+>>sudo rm default
